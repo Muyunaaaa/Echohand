@@ -132,6 +132,7 @@ export default {
 
       this.sendToUI('log', "正在申请硬件流...");
 
+      //todo:这里需要修改，uni-app不支持navigator.mediaDevices，导致出现typeerror
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { width: 640, height: 480, facingMode: 'user' }
