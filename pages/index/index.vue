@@ -1,26 +1,31 @@
 <template>
-	<view class="content">
-		<image class="logo" src="/static/logo.png"></image>
-		<view class="text-area">
-			<text class="title">{{title}}</text>
-		</view>
-	</view>
+  <view class="content">
+    <view class="result-box">
+      <text class="label">识别结果：</text>
+      <text class="text">{{ translatedText }}</text>
+    </view>
+
+    <view class="video-container">
+      <video id="input_video" class="hidden-video"></video>
+      <canvas id="output_canvas" class="main-canvas"></canvas>
+    </view>
+  </view>
 </template>
 
 <script>
-	export default {
-		data() {
-			return {
-				title: 'Hello'
-			}
-		},
-		onLoad() {
-
-		},
-		methods: {
-
-		}
-	}
+export default {
+  data() {
+    return {
+      translatedText: "正在等待手势...", // 页面上显示的文字
+    }
+  },
+  methods: {
+    // 接收来自 AI 层的翻译结果并更新 UI
+    onMessageFromAI(text) {
+      this.translatedText = text;
+    }
+  }
+}
 </script>
 
 <style>
