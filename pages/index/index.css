@@ -27,30 +27,27 @@
     margin: 20rpx;
     border-radius: 30rpx;
     overflow: hidden;
-    background: #1c1c1e;
+    background: #000;
 }
 
-/* 视频隐藏，但必须存在于 DOM 中供 MediaPipe 调用 */
 .debug-video {
-    display: none;
+    display: none !important;
 }
 
-/* 主画布容器：铺满全屏 */
 .vision-canvas-container {
     width: 100%;
     height: 100%;
-    z-index: 5;
     background: #000;
 }
 
 .loading-overlay {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.85);
+    background: rgba(0, 0, 0, 0.95);
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 100;
+    z-index: 1000;
 }
 
 .start-card {
@@ -69,24 +66,35 @@
     font-weight: bold;
 }
 
-.debug-status {
-    font-size: 20rpx;
-    color: #ff4d4f; /* 报错信息显眼一点 */
-    display: block;
-    margin-top: 10rpx;
-}
-
 .action-bar {
     padding: 40rpx;
     background: #fff;
-}
-
-.debug-panel {
-    margin-bottom: 20rpx;
 }
 
 .debug-line {
     font-size: 22rpx;
     color: #666;
     display: block;
+    line-height: 1.5;
+}
+
+.btn-group {
+    display: flex;
+    gap: 20rpx;
+    margin-top: 20rpx;
+}
+
+.btn-switch {
+    flex: 1;
+    background: #34c759;
+    color: #fff;
+    border-radius: 20rpx;
+    font-weight: bold;
+}
+
+.btn-clear {
+    flex: 1;
+    background: #8e8e93;
+    color: #fff;
+    border-radius: 20rpx;
 }

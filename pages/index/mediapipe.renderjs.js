@@ -1,6 +1,8 @@
 let handsInstance = null;
-let cameraInstance = null;
 let isInitializing = false;
+let currentFacingMode = 'user';
+let frameCounter = 0;
+let animationId = null;
 
 export default {
     mounted() {
@@ -9,143 +11,187 @@ export default {
     },
     methods: {
         sendToUI(type, content) {
-            if (window.__MP_SENDER) {
-                window.__MP_SENDER.callMethod('receiveMessage', { type, content });
-            }
+            if (window.__MP_SENDER) window.__MP_SENDER.callMethod('receiveMessage', { type, content });
         },
-        // 带有时间戳的增强型日志
         log(msg) {
-            const now = new Date();
-            const time = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
+            const time = new Date().toLocaleTimeString().split(' ')[0];
             this.sendToUI('log', `[${time}] ${msg}`);
-            console.log(`[MediaPipe] ${msg}`);
+            console.log(`[AI-DEBUG] ${msg}`);
         },
         async prepareEnvironment() {
-            if (window.Hands) return this.log("资源已在内存中");
+            if (window.Hands) return;
             const p = 'static/mp-hands/';
             try {
-                this.log("正在加载核心库...");
                 await this.loadScript(`${p}hands.js`);
-                await this.loadScript(`${p}camera_utils.js`);
                 await this.loadScript(`${p}drawing_utils.js`);
-                this.log("JS驱动加载完成");
+                this.log("高清引擎加载成功");
             } catch (e) {
-                this.sendToUI('error', "脚本加载失败，请确认为 static/mp-hands 目录");
+                this.sendToUI('error', "静态资源加载失败");
             }
         },
         loadScript(url) {
             return new Promise((resolve, reject) => {
                 const s = document.createElement('script');
-                s.src = url;
-                s.onload = () => { this.log(`已载入: ${url.split('/').pop()}`); resolve(); };
-                s.onerror = reject;
+                s.src = url; s.onload = resolve; s.onerror = reject;
                 document.head.appendChild(s);
             });
         },
-        async manualStart() {
+        async switchCamera() {
             if (isInitializing) return;
+            currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
+            this.log(`>>> 切换至: ${currentFacingMode}`);
+            await this.manualStart();
+        },
+        async manualStart() {
             isInitializing = true;
-            this.log("正在准备硬件...");
+            this.log("正在重置高清焦距...");
 
-            // 清理旧实例
-            if (cameraInstance) { await cameraInstance.stop(); cameraInstance = null; }
-            if (handsInstance) { await handsInstance.close(); handsInstance = null; }
+            if (animationId) cancelAnimationFrame(animationId);
 
-            this.sendToUI('ready', '');
+            const allVideos = document.querySelectorAll('video');
+            allVideos.forEach(v => {
+                if (v.srcObject) {
+                    v.srcObject.getTracks().forEach(t => t.stop());
+                    v.srcObject = null;
+                }
+                v.remove();
+            });
+
+            await new Promise(r => setTimeout(r, 750));
 
             const vContainer = document.getElementById('video_mount_container');
             const video = document.createElement('video');
             video.setAttribute('autoplay', '');
             video.setAttribute('muted', '');
             video.setAttribute('playsinline', 'true');
-            vContainer.innerHTML = '';
+            // 物理 video 设置为实际请求的大小
+            video.style.cssText = "position:fixed;top:-2000px;width:720px;height:1280px;opacity:0.01;";
             vContainer.appendChild(video);
 
             try {
-                this.log("请求相机权限...");
+                this.log(`激活 ${currentFacingMode} 并请求对焦...`);
+
+                // 1. 请求高清流
+                const constraints = {
+                    video: {
+                        facingMode: currentFacingMode,
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                };
+
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+                // 2. 核心补丁：强制开启硬件持续自动对焦 (Focus Mode)
+                const track = stream.getVideoTracks()[0];
+                if (track.getCapabilities) {
+                    const caps = track.getCapabilities();
+                    if (caps.focusMode && caps.focusMode.includes('continuous')) {
+                        this.log("硬件支持自动对焦，正在强制开启...");
+                        try {
+                            await track.applyConstraints({
+                                advanced: [{ focusMode: 'continuous' }]
+                            });
+                        } catch (e) {
+                            this.log("应用对焦约束失败，将依赖硬件自启");
+                        }
+                    }
+                }
+
+                video.srcObject = stream;
+                this.sendToUI('ready', currentFacingMode);
+
+                video.onloadedmetadata = () => {
+                    this.log(`链路就绪: ${video.videoWidth}x${video.videoHeight}`);
+                    video.play().then(() => this.initAIAndDrive(video));
+                };
+            } catch (err) {
+                this.log(`高级模式不匹配: ${err.name}，降级启动...`);
+                this.manualStartLowRes(video);
+            }
+        },
+        async manualStartLowRes(video) {
+            try {
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'user', width: 640, height: 480 }
+                    video: { facingMode: currentFacingMode }
                 });
                 video.srcObject = stream;
                 video.onloadedmetadata = () => {
-                    this.log("视频流已挂载，初始化AI...");
-                    video.play().then(() => this.initMediaPipe(video));
+                    video.play().then(() => this.initAIAndDrive(video));
                 };
-            } catch (err) {
+            } catch (e) {
                 isInitializing = false;
-                this.log("相机开启报错: " + err.message);
-                this.sendToUI('error', "无法访问相机，请检查权限");
+                this.sendToUI('error', "硬件唤醒失败");
             }
         },
-        initMediaPipe(video) {
+        initAIAndDrive(video) {
             const cContainer = document.getElementById('canvas_mount_container');
             const canvas = document.createElement('canvas');
-            canvas.style.cssText = "width:100%;height:100%;display:block;object-fit:cover;";
+            // 样式补丁：增加 image-rendering 属性，防止浏览器对 Canvas 进行平滑模糊处理
+            canvas.style.cssText = "width:100%;height:100%;display:block;object-fit:cover;image-rendering: -webkit-optimize-contrast; image-rendering: pixelated;";
             cContainer.innerHTML = '';
             cContainer.appendChild(canvas);
-            const ctx = canvas.getContext('2d');
+            const ctx = canvas.getContext('2d', { alpha: false });
 
-            try {
+            // 彻底关闭 Canvas 内部的图像平滑
+            ctx.imageSmoothingEnabled = false;
+
+            if (!handsInstance) {
                 // eslint-disable-next-line no-undef
                 handsInstance = new Hands({
-                    locateFile: (file) => {
-                        this.log(`加载WASM组件: ${file}`);
-                        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/${file}`;
-                    }
+                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/${file}`
                 });
-
                 handsInstance.setOptions({
                     maxNumHands: 1,
-                    modelComplexity: 1,
+                    modelComplexity: 1, // 0 性能最好, 1 精准度均衡
                     minDetectionConfidence: 0.5,
                     minTrackingConfidence: 0.5
                 });
-
-                handsInstance.onResults((results) => {
-                    if (!results || !results.image) return;
-
-                    if (canvas.width !== video.videoWidth) {
-                        canvas.width = video.videoWidth;
-                        canvas.height = video.videoHeight;
-                    }
-
-                    ctx.save();
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                    // 镜像绘制底层画面
-                    ctx.translate(canvas.width, 0);
-                    ctx.scale(-1, 1);
-                    ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
-
-                    // 绘制手势
-                    if (results.multiHandLandmarks) {
-                        for (const landmarks of results.multiHandLandmarks) {
-                            // eslint-disable-next-line no-undef
-                            drawConnectors(ctx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 4});
-                            // eslint-disable-next-line no-undef
-                            drawLandmarks(ctx, landmarks, {color: '#FF0000', lineWidth: 2});
-                        }
-                    }
-                    ctx.restore();
-                });
-
-                // eslint-disable-next-line no-undef
-                cameraInstance = new Camera(video, {
-                    onFrame: async () => {
-                        if (handsInstance) await handsInstance.send({ image: video });
-                    },
-                    width: 640, height: 480
-                });
-
-                cameraInstance.start().then(() => {
-                    isInitializing = false;
-                    this.sendToUI('ai_online', "");
-                    this.log("系统运行中 - 窗口已合并");
-                });
-            } catch (err) {
-                isInitializing = false;
-                this.log("AI初始化崩溃: " + err.message);
             }
+
+            handsInstance.onResults((results) => {
+                frameCounter++;
+                if (frameCounter % 100 === 0) this.log(`AI 心跳: ${video.videoWidth}p 高清模式`);
+
+                if (!results || !results.image) return;
+
+                if (canvas.width !== video.videoWidth) {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                }
+
+                ctx.save();
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                if (currentFacingMode === 'user') {
+                    ctx.translate(canvas.width, 0); ctx.scale(-1, 1);
+                }
+
+                // 绘制原始图像
+                ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
+                if (results.multiHandLandmarks) {
+                    for (const landmarks of results.multiHandLandmarks) {
+                        // eslint-disable-next-line no-undef
+                        drawConnectors(ctx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 4});
+                        // eslint-disable-next-line no-undef
+                        drawLandmarks(ctx, landmarks, {color: '#FF0000', lineWidth: 2});
+                    }
+                }
+                ctx.restore();
+            });
+
+            const runDrive = async () => {
+                if (!video || video.paused || video.ended) return;
+                if (video.readyState >= 2) {
+                    try { await handsInstance.send({ image: video }); } catch (e) {}
+                }
+                animationId = requestAnimationFrame(runDrive);
+            };
+
+            runDrive();
+            isInitializing = false;
+            this.sendToUI('ai_online', '');
+            this.log(">>> 高清链路已就绪");
         }
     }
 }
