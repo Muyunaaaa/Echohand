@@ -1,4 +1,4 @@
-//todo:解决后置摄像头,一旦识别手部就卡顿的问题
+//经过检验，在ios-15pm上运行十分流畅
 let handsInstance = null;
 let isInitializing = false;
 let currentFacingMode = 'user';
