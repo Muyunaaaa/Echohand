@@ -1,8 +1,8 @@
 let handsInstance = null;
 let isInitializing = false;
 let currentFacingMode = 'user';
-let frameCounter = 0;
 let animationId = null;
+let videoTrack = null;
 
 export default {
     mounted() {
@@ -24,9 +24,9 @@ export default {
             try {
                 await this.loadScript(`${p}hands.js`);
                 await this.loadScript(`${p}drawing_utils.js`);
-                this.log("高清引擎加载成功");
+                this.log("超清引擎就绪");
             } catch (e) {
-                this.sendToUI('error', "静态资源加载失败");
+                this.sendToUI('error', "加载失败");
             }
         },
         loadScript(url) {
@@ -39,102 +39,79 @@ export default {
         async switchCamera() {
             if (isInitializing) return;
             currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
-            this.log(`>>> 切换至: ${currentFacingMode}`);
+            this.log(`>>> 强制切换链路: ${currentFacingMode}`);
             await this.manualStart();
         },
         async manualStart() {
             isInitializing = true;
-            this.log("正在重置高清焦距...");
+            this.log("正在重构像素矩阵...");
 
             if (animationId) cancelAnimationFrame(animationId);
+            if (videoTrack) { videoTrack.stop(); videoTrack = null; }
 
-            const allVideos = document.querySelectorAll('video');
-            allVideos.forEach(v => {
-                if (v.srcObject) {
-                    v.srcObject.getTracks().forEach(t => t.stop());
-                    v.srcObject = null;
-                }
+            document.querySelectorAll('video').forEach(v => {
+                if (v.srcObject) v.srcObject.getTracks().forEach(t => t.stop());
                 v.remove();
             });
 
-            await new Promise(r => setTimeout(r, 750));
+            await new Promise(r => setTimeout(r, 800));
 
             const vContainer = document.getElementById('video_mount_container');
             const video = document.createElement('video');
             video.setAttribute('autoplay', '');
             video.setAttribute('muted', '');
             video.setAttribute('playsinline', 'true');
-            // 物理 video 设置为实际请求的大小
-            video.style.cssText = "position:fixed;top:-2000px;width:720px;height:1280px;opacity:0.01;";
+            // 隐藏 Video 但给它足够大的渲染尺寸
+            video.style.cssText = "position:fixed;top:-5000px;width:1280px;height:720px;";
             vContainer.appendChild(video);
 
             try {
-                this.log(`激活 ${currentFacingMode} 并请求对焦...`);
-
-                // 1. 请求高清流
+                // 强制要求高分辨率，不接受妥协
                 const constraints = {
                     video: {
                         facingMode: currentFacingMode,
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
+                        width: { min: 1280, ideal: 1920 },
+                        height: { min: 720, ideal: 1080 }
                     }
                 };
 
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
-
-                // 2. 核心补丁：强制开启硬件持续自动对焦 (Focus Mode)
-                const track = stream.getVideoTracks()[0];
-                if (track.getCapabilities) {
-                    const caps = track.getCapabilities();
-                    if (caps.focusMode && caps.focusMode.includes('continuous')) {
-                        this.log("硬件支持自动对焦，正在强制开启...");
-                        try {
-                            await track.applyConstraints({
-                                advanced: [{ focusMode: 'continuous' }]
-                            });
-                        } catch (e) {
-                            this.log("应用对焦约束失败，将依赖硬件自启");
-                        }
-                    }
-                }
-
+                videoTrack = stream.getVideoTracks()[0];
                 video.srcObject = stream;
-                this.sendToUI('ready', currentFacingMode);
 
                 video.onloadedmetadata = () => {
-                    this.log(`链路就绪: ${video.videoWidth}x${video.videoHeight}`);
+                    this.log(`物理像素流: ${video.videoWidth}x${video.videoHeight}`);
                     video.play().then(() => this.initAIAndDrive(video));
                 };
+                this.sendToUI('ready', currentFacingMode);
             } catch (err) {
-                this.log(`高级模式不匹配: ${err.name}，降级启动...`);
+                this.log(`高清模式受限: ${err.name}`);
                 this.manualStartLowRes(video);
             }
         },
         async manualStartLowRes(video) {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: currentFacingMode }
-                });
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode } });
                 video.srcObject = stream;
-                video.onloadedmetadata = () => {
-                    video.play().then(() => this.initAIAndDrive(video));
-                };
+                video.onloadedmetadata = () => video.play().then(() => this.initAIAndDrive(video));
             } catch (e) {
                 isInitializing = false;
-                this.sendToUI('error', "硬件唤醒失败");
+                this.sendToUI('error', "硬件调用失败");
             }
         },
         initAIAndDrive(video) {
             const cContainer = document.getElementById('canvas_mount_container');
             const canvas = document.createElement('canvas');
-            // 样式补丁：增加 image-rendering 属性，防止浏览器对 Canvas 进行平滑模糊处理
-            canvas.style.cssText = "width:100%;height:100%;display:block;object-fit:cover;image-rendering: -webkit-optimize-contrast; image-rendering: pixelated;";
+            // 解决拉伸模糊的关键：image-rendering
+            canvas.style.cssText = "width:100%;height:100%;display:block;object-fit:cover;image-rendering:-webkit-optimize-contrast;";
             cContainer.innerHTML = '';
             cContainer.appendChild(canvas);
-            const ctx = canvas.getContext('2d', { alpha: false });
 
-            // 彻底关闭 Canvas 内部的图像平滑
-            ctx.imageSmoothingEnabled = false;
+            const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+
+            // 核心修改：强制高质量
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
 
             if (!handsInstance) {
                 // eslint-disable-next-line no-undef
@@ -143,36 +120,39 @@ export default {
                 });
                 handsInstance.setOptions({
                     maxNumHands: 1,
-                    modelComplexity: 1, // 0 性能最好, 1 精准度均衡
+                    modelComplexity: 1, // 后置模糊时必须用 1 增强边缘检测
                     minDetectionConfidence: 0.5,
                     minTrackingConfidence: 0.5
                 });
             }
 
             handsInstance.onResults((results) => {
-                frameCounter++;
-                if (frameCounter % 100 === 0) this.log(`AI 心跳: ${video.videoWidth}p 高清模式`);
-
                 if (!results || !results.image) return;
 
+                // 物理分辨率对齐
                 if (canvas.width !== video.videoWidth) {
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
                 }
 
                 ctx.save();
+                // 解决后置发灰模糊：手动注入锐化滤镜
+                if (currentFacingMode === 'environment') {
+                    // contrast(1.2) 提升对比度，brightness(1.1) 补偿暗部
+                    ctx.filter = 'contrast(1.2) brightness(1.1) saturate(1.1)';
+                }
+
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 if (currentFacingMode === 'user') {
                     ctx.translate(canvas.width, 0); ctx.scale(-1, 1);
                 }
 
-                // 绘制原始图像
                 ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
 
                 if (results.multiHandLandmarks) {
                     for (const landmarks of results.multiHandLandmarks) {
                         // eslint-disable-next-line no-undef
-                        drawConnectors(ctx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 4});
+                        drawConnectors(ctx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 5});
                         // eslint-disable-next-line no-undef
                         drawLandmarks(ctx, landmarks, {color: '#FF0000', lineWidth: 2});
                     }
@@ -191,7 +171,6 @@ export default {
             runDrive();
             isInitializing = false;
             this.sendToUI('ai_online', '');
-            this.log(">>> 高清链路已就绪");
         }
     }
 }
