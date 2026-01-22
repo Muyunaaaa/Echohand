@@ -1,3 +1,4 @@
+//todo:解决后置摄像头,一旦识别手部就卡顿的问题
 let handsInstance = null;
 let isInitializing = false;
 let currentFacingMode = 'user';
