@@ -2,6 +2,7 @@
    EchoHand Stable Camera Engine
    =============================== */
 
+//FIXME:后续要解决部分手机无限放大倍数的问题
 let handsInstance = null;
 let isInitializing = false;
 let currentFacingMode = 'user';
@@ -38,7 +39,7 @@ export default {
         },
 
         /* ===============================
-           1️⃣ 稳定加载 MediaPipe
+            1️⃣ 稳定加载 MediaPipe
         =============================== */
         async waitForHandsReady() {
             const p = 'static/mp-hands/';
@@ -74,7 +75,7 @@ export default {
         },
 
         /* ===============================
-           2️⃣ 切换摄像头
+            2️⃣ 切换摄像头
         =============================== */
         async switchCamera() {
             if (isInitializing) return;
@@ -85,7 +86,7 @@ export default {
         },
 
         /* ===============================
-           3️⃣ 启动摄像头（核心）
+            3️⃣ 启动摄像头（核心）
         =============================== */
         async manualStart() {
             if (typeof window.Hands !== 'function') {
@@ -163,7 +164,7 @@ export default {
         },
 
         /* ===============================
-           4️⃣ AI + Canvas 驱动
+            4️⃣ AI + Canvas 驱动
         =============================== */
         initAIAndDrive(video) {
             dbg('AI', 'initializing AI pipeline');
@@ -189,7 +190,7 @@ export default {
                         `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/${f}`
                 });
                 handsInstance.setOptions({
-                    maxNumHands: 1,
+                    maxNumHands: 2,
                     modelComplexity: 1,
                     minDetectionConfidence: 0.5,
                     minTrackingConfidence: 0.5
