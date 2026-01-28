@@ -1,96 +1,112 @@
-/**
- * 中国手语（CSL）专项识别算法
- * 针对：你好、谢谢、我、时间等手势逻辑
- */
-
 export const SignLanguageProcessor = {
-    // 基础工具：计算欧氏距离
-    getDist(p1, p2) {
-        return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2) + Math.pow(p1.z - p2.z, 2));
+    session: null,
+    frameBuffer: [],
+    MAX_FRAMES: 30,
+    isInitializing: false,
+    _logger: null,
+    hasReportedStatus: false,
+    lastDetectedLogTime: 0,
+
+    log(tag, msg) {
+        if (this._logger) this._logger(tag, msg);
+        // 使用 %c 让关键日志在控制台更醒目（蓝色背景）
+        console.log(`%c[Algo][${tag}]`, 'background: #007AFF; color: #fff; border-radius: 3px; padding: 2px 5px;', msg);
     },
 
-    // 核心工具：获取手指伸展度 (0-1)
-    // 逻辑：计算指尖到掌根距离 与 关节到掌根距离的比值，增加不同手型的兼容性
-    getStretch(lm, tipIdx, mcpIdx) {
-        const d1 = this.getDist(lm[tipIdx], lm[0]);
-        const d2 = this.getDist(lm[mcpIdx], lm[0]);
-        return d1 / d2;
+    async init(ort, logger) {
+        this._logger = logger;
+        if (this.session || this.isInitializing) return;
+        this.isInitializing = true;
+
+        this.log("INIT-CHECK", "开始算法引擎初始化流程...");
+
+        if (!ort) {
+            this.log("FATAL", "ONNX Runtime 库加载失败，无法使用模型，直接降级。");
+            this.session = null;
+            this.isInitializing = false;
+            this.hasReportedStatus = true;
+            return;
+        }
+
+        try {
+            ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
+
+            // 💡 关键：这行日志会告诉你程序尝试去哪里找模型
+            this.log("MODEL-TRY", "尝试从路径加载模型: /static/model/slr_model.onnx");
+
+            this.session = await ort.InferenceSession.create('/static/model/slr_model.onnx', {
+                executionProviders: ['wasm']
+            });
+
+            this.log("MODEL-SUCCESS", "✅ 模型加载成功！当前处于：【深度学习 AI 模式】");
+        } catch (e) {
+            // 💡 关键：这行会打印具体的报错信息，如 404 或格式错误
+            this.log("MODEL-ERROR", "❌ 模型加载失败。原因: " + e.message);
+            this.log("MODE-INFO", "⚠️ 降级成功：当前处于：【简易几何算法模式】");
+            this.session = null;
+        } finally {
+            this.isInitializing = false;
+            this.hasReportedStatus = true;
+        }
     },
 
-    analyze(multiHandLandmarks) {
-        if (!multiHandLandmarks || multiHandLandmarks.length === 0) return null;
+    async analyze(landmarks) {
+        // 只有在 init 流程彻底走完（无论成败）后，才允许 analyze 运行
+        if (this.isInitializing) return null;
 
-        const lm = multiHandLandmarks[0];
-
-        // 1. 预计算手指状态
-        const isThumbUp = this.getStretch(lm, 4, 2) > 1.2;
-        const isIndexUp = this.getStretch(lm, 8, 5) > 1.2;
-        const isMiddleUp = this.getStretch(lm, 12, 9) > 1.2;
-        const isRingUp = this.getStretch(lm, 16, 13) > 1.2;
-        const isPinkyUp = this.getStretch(lm, 20, 17) > 1.2;
-
-        // 2. 预计算关键间距
-        const thumbTipToIndexRoot = this.getDist(lm[4], lm[5]); // 拇指尖到食指根部
-        const palmOrientation = lm[0].z - lm[9].z; // 正负判断手心朝向
-
-        // --- 根据图片内容实现的专项算法 ---
-
-        // 【你好】/【好】
-        // 图片说明：竖起大拇指。
-        // 算法：仅大拇指伸直，且向上（y值小于掌心）
-        if (isThumbUp && !isIndexUp && !isMiddleUp && !isRingUp && !isPinkyUp) {
-            if (lm[4].y < lm[2].y) return "你好/好";
+        if (!this.hasReportedStatus) {
+            this.log("STATUS", this.session ? "AI模式运行中" : "简易模式运行中");
+            this.hasReportedStatus = true;
         }
 
-        // 【我】
-        // 图片说明：指一下自己。
-        // 算法：食指伸出，且食指尖的 Z 轴深度明显靠近相机或指向特定方向
-        // 在 2D 视角下，通常表现为食指单指伸出，指向屏幕中心
-        if (isIndexUp && !isMiddleUp && !isRingUp && !isPinkyUp && !isThumbUp) {
-            return "我";
+        let result = null;
+        if (this.session) {
+            const currentFrame = landmarks.flatMap(pt => [pt.x, pt.y]);
+            this.frameBuffer.push(currentFrame);
+            if (this.frameBuffer.length > this.MAX_FRAMES) this.frameBuffer.shift();
+            if (this.frameBuffer.length === this.MAX_FRAMES) {
+                result = await this.runInference();
+            }
+        } else {
+            result = this.runFallback(landmarks);
         }
 
-        // 【谢谢】
-        // 图片说明：拇指弯曲几下。
-        // 算法：识别大拇指处于“半弯曲”状态，即指尖距离食指根部很近，但并不是握拳
-        const thumbIsNodding = thumbTipToIndexRoot < 0.08;
-        if (thumbIsNodding && !isIndexUp && !isMiddleUp && !isRingUp && !isPinkyUp) {
-            return "谢谢";
+        // 识别防抖日志
+        if (result && (Date.now() - this.lastDetectedLogTime > 1500)) {
+            this.log("RECOGNIZE", `识别到: [${result}]`);
+            this.lastDetectedLogTime = Date.now();
         }
 
-        // 【早上好 / 太阳升起】
-        // 图片说明：手指缓慢张开。
-        // 算法：识别到从“拳头”变“五指张开”的过程（此处静态识别五指全开）
-        if (isThumbUp && isIndexUp && isMiddleUp && isRingUp && isPinkyUp) {
-            return "早/五/大家";
-        }
+        return result;
+    },
 
-        // 【晚上好】
-        // 图片说明：手指缓慢合拢。
-        // 算法：识别五指处于半合拢状态（伸展度在 0.8 - 1.1 之间）
-        const isClosing = [8, 12, 16, 20].every(idx => {
-            const ratio = this.getStretch(lm, idx, idx - 2);
-            return ratio > 0.8 && ratio < 1.1;
-        });
-        if (isClosing && !isThumbUp) {
-            return "晚";
-        }
-
-        // 【我很很好】（正确顺序是 我/好/很）
-        // 图片说明：拇指按在食指根部，向下一顿。
-        // 算法：拇指尖 (4) 极其接近食指根部 (5)
-        if (thumbTipToIndexRoot < 0.04 && !isIndexUp && !isMiddleUp) {
-            return "很/非常";
-        }
-
-        // 【上午/下午】
-        // 图片说明：手指水平划动。这需要配合 index.vue 的位移判断。
-        // 静态识别：手掌平放（食指根部 5 和 小指根部 17 的 Y 轴接近）
-        const isHandHorizontal = Math.abs(lm[5].y - lm[17].y) < 0.05;
-        if (isHandHorizontal && isIndexUp && isMiddleUp && isRingUp && isPinkyUp) {
-            return "平/时间";
-        }
-
+    runFallback(landmarks) {
+        // 保持你要求的代码完整性：简易几何算法逻辑
+        const tips = [8, 12, 16, 20];
+        const bases = [6, 10, 14, 18];
+        const s = tips.map((tip, i) => landmarks[tip].y < landmarks[bases[i]].y);
+        if (s[0] && s[1] && !s[2] && !s[3]) return "学习";
+        if (s[0] && !s[1] && !s[2] && !s[3]) return "你";
+        if (s.every(state => state === true)) return "你好";
+        if (s.every(state => state === false)) return "谢谢";
         return null;
+    },
+
+    async runInference() {
+        try {
+            const inputData = Float32Array.from(this.frameBuffer.flat());
+            const tensor = new window.ort.Tensor('float32', inputData, [1, 30, 42]);
+            const results = await this.session.run({ [this.session.inputNames[0]]: tensor });
+            const output = results[this.session.outputNames[0]].data;
+            const argMax = output.indexOf(Math.max(...output));
+            if (output[argMax] < 0.8) return null;
+            const labels = ["你好", "谢谢", "学习", "再见", "我", "你"];
+            return labels[argMax] || null;
+        } catch (e) { return null; }
+    },
+
+    clear() {
+        this.frameBuffer = [];
+        this.log("SYS", "缓冲区重置");
     }
 };

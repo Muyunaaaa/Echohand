@@ -93,7 +93,6 @@
 </template>
 
 <script>
-import { SignLanguageProcessor } from './signLanguage.js';
 import { NLPProcessor } from './nlpProcessor.js';
 
 export default {
@@ -109,13 +108,16 @@ export default {
     }
   },
   methods: {
+    // 接收来自 renderjs 的推理数据
     receiveMessage(data) {
       if (data.type === 'ready') this.isCameraRunning = true;
-      if (data.type === 'hand_data') this.handleSignLogic(data.content);
+      if (data.type === 'sign_word') {
+        this.handleSignLogic(data.content);
+      }
     },
-    handleSignLogic(landmarks) {
-      const word = SignLanguageProcessor.analyze(landmarks);
+    handleSignLogic(word) {
       const now = Date.now();
+      // 1.2秒去重与冷却逻辑
       if (word && word !== this.lastWord && (now - this.lastTime > 1200)) {
         this.lastWord = word;
         this.lastTime = now;
@@ -124,8 +126,7 @@ export default {
 
         NLPProcessor.addWord(word, (res) => {
           this.sentencePreview = res;
-          // 核心优化1：句子生成后，清空蓝色词条
-          this.wordQueue = [];
+          this.wordQueue = []; // 识别完一整句后清空词条区
           const time = new Date();
           this.finalHistory.unshift({
             content: res,
@@ -138,6 +139,8 @@ export default {
       this.sentencePreview = "";
       this.wordQueue = [];
       this.lastWord = "";
+      // 必须调用 renderjs 里的这个方法名
+      this.$ownerInstance.callMethod('resetAlgorithm');
     }
   }
 }
