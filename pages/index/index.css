@@ -1,181 +1,367 @@
-/* 基础容器 */
 .container {
-    display: flex;
-    flex-direction: column;
     height: 100vh;
     width: 100vw;
     background: #000;
+    display: flex;
+    flex-direction: column;
+    color: #fff;
     overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
 }
 
-/* 顶部状态栏 */
-.status-bar {
-    background: #ffffff;
-    padding: 100rpx 40rpx 40rpx;
-    border-radius: 0 0 40rpx 40rpx;
-    box-shadow: 0 4rpx 20rpx rgba(0,0,0,0.2);
-    z-index: 50; /* 确保在 Canvas 之上 */
+/* --- 顶部经典导航：微调下移避开刘海 --- */
+.glass-header {
+    /* 增加 padding-top 到 125rpx，实现向下挪动一点点的视觉效果 */
+    padding: 125rpx 50rpx 40rpx;
+    position: absolute;
+    top: 0;
+    width: 100%;
+    z-index: 100;
+    box-sizing: border-box;
 }
-
-.header {
+.header-main {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 10rpx;
 }
-
-.title {
-    font-size: 36rpx;
-    font-weight: bold;
-    color: #333;
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 15rpx;
 }
-
-.btn-history {
-    font-size: 22rpx;
-    color: #fff;
-    background: #34c759;
-    padding: 8rpx 20rpx;
-    border-radius: 12rpx;
-}
-
-.result-text {
-    font-size: 56rpx;
-    font-weight: 800;
+.brand-logo {
     color: #007AFF;
-    text-align: center;
-    display: block;
-    min-height: 80rpx;
+    font-size: 18rpx;
 }
-
-.sentence-preview {
-    display: block;
+.brand-name {
     font-size: 32rpx;
-    color: #007AFF;
+    font-weight: 800;
+    letter-spacing: 6rpx;
+    line-height: 1;
+}
+.history-icon {
+    font-size: 50rpx;
+    color: #fff;
+    opacity: 0.8;
+    line-height: 1;
+}
+
+/* --- 封面页 --- */
+.welcome-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 200;
+    background: radial-gradient(circle at 50% 45%, #001a33 0%, #000 100%);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+.bg-glow-sphere {
+    position: absolute;
+    width: 100%;
+    height: 60%;
+    background: radial-gradient(circle, rgba(0,122,255,0.1) 0%, transparent 70%);
+    top: 10%;
+    filter: blur(60px);
+}
+.hero-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    z-index: 10;
+    margin-bottom: 120rpx;
+}
+.app-title {
+    font-size: 100rpx;
+    font-weight: 100;
+    letter-spacing: 12rpx;
+    margin-bottom: 30rpx;
+}
+.slogan-container {
+    width: 100%;
     text-align: center;
+}
+.app-slogan {
+    display: block;
+    font-size: 28rpx;
+    color: #007AFF;
+    letter-spacing: 12rpx;
+    font-weight: bold;
     margin-top: 10rpx;
+}
+
+.visual-engine {
+    position: relative;
+    width: 350rpx;
+    height: 350rpx;
+    margin-bottom: 80rpx;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.core-node {
+    width: 12rpx;
+    height: 12rpx;
+    background: #fff;
+    border-radius: 50%;
+    box-shadow: 0 0 30rpx #007AFF;
+}
+.orbit {
+    position: absolute;
+    border: 1px solid rgba(0, 122, 255, 0.15);
+    border-radius: 50%;
+}
+.orbit-1 {
+    width: 200rpx;
+    height: 200rpx;
+    border-top-color: #007AFF;
+    animation: rotate 6s infinite linear;
+}
+.orbit-2 {
+    width: 320rpx;
+    height: 320rpx;
+    border-bottom-color: #fff;
+    animation: rotate 12s infinite linear reverse;
+}
+
+.btn-start-engine {
+    background: transparent;
+    color: #fff;
+    padding: 25rpx 100rpx;
+    border-radius: 10rpx;
+    font-size: 28rpx;
+    border: 1px solid rgba(255,255,255,0.3);
+    z-index: 10;
+    letter-spacing: 4rpx;
+}
+
+/* --- AR 界面：跟随 Header 同步微调 --- */
+.ar-display {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    /* 调大顶部 padding 确保蓝色词条不遮挡下移后的标题 */
+    padding: 250rpx 40rpx;
+    pointer-events: none;
+}
+.word-tags-row {
+    display: flex;
+    gap: 15rpx;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
+}
+.word-tag-item {
+    background: #007AFF;
+    color: #fff;
+    padding: 10rpx 30rpx;
+    border-radius: 12rpx;
+    font-size: 26rpx;
+    font-weight: bold;
+    animation: fadeIn 0.3s ease;
+    box-shadow: 0 4rpx 15rpx rgba(0,122,255,0.3);
+}
+.waiting-hint {
+    font-size: 22rpx;
+    color: rgba(255,255,255,0.2);
+    letter-spacing: 4rpx;
+}
+
+.sentence-fixed-area {
+    position: absolute;
+    bottom: 280rpx;
+    width: 90%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.ai-status-hint {
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+    font-size: 20rpx;
+    color: #007AFF;
+    font-weight: bold;
+    margin-bottom: 25rpx;
+}
+.sentence-black-card {
+    width: 100%;
+    background: rgba(0,0,0,0.85);
+    backdrop-filter: blur(30px);
+    padding: 45rpx;
+    border-radius: 40rpx;
+    border: 1px solid rgba(255,255,255,0.15);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 20rpx 60rpx rgba(0,0,0,0.5);
+}
+.sentence-text {
+    font-size: 44rpx;
+    color: #fff;
+    line-height: 1.6;
+    text-align: center;
+    font-weight: 600;
+}
+
+/* --- 底部控制栏 --- */
+.control-panel {
+    position: fixed;
+    bottom: 80rpx;
+    left: 0;
+    width: 100%;
+    z-index: 500;
+    padding: 0 80rpx;
+    box-sizing: border-box;
+}
+.classic-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+.footer-btn {
+    font-size: 28rpx;
+    font-weight: bold;
+    color: rgba(255,255,255,0.6);
+    letter-spacing: 4rpx;
+    padding: 20rpx;
+}
+.footer-divider {
+    width: 1px;
+    height: 30rpx;
+    background: rgba(255,255,255,0.2);
+}
+
+/* --- 历史抽屉菜单：下移微调 --- */
+.history-drawer {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.8);
+    z-index: 1000;
+    visibility: hidden;
+    opacity: 0;
+    transition: 0.3s;
+}
+.drawer-open {
+    visibility: visible;
+    opacity: 1;
+}
+.drawer-content {
+    position: absolute;
+    right: 0;
+    width: 85%;
+    height: 100%;
+    background: #080808;
+    /* 这里的 padding-top 也同步微调到 125rpx 以上 */
+    padding: 140rpx 40rpx;
+    transform: translateX(100%);
+    transition: 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+.drawer-open .drawer-content {
+    transform: translateX(0);
+}
+
+.drawer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 60rpx;
+    border-bottom: 1px solid #1a1a1a;
+    padding-bottom: 30rpx;
+}
+.drawer-title-main {
+    font-size: 40rpx;
+    font-weight: 900;
+    letter-spacing: 4rpx;
+    color: #fff;
+    display: block;
+}
+.drawer-title-sub {
+    font-size: 20rpx;
+    color: #444;
+    letter-spacing: 4rpx;
+    margin-top: 5rpx;
+}
+.drawer-close-btn {
+    padding: 10rpx 25rpx;
+    border: 1px solid #333;
+    border-radius: 10rpx;
+}
+.close-txt {
+    color: #007AFF;
+    font-size: 24rpx;
     font-weight: bold;
 }
 
-/* 视觉核心区域 */
-.vision-area {
-    flex: 1;
-    position: relative;
-    background: #000;
-    overflow: hidden;
-    z-index: 1;
+/* 卡片式列表 */
+.history-card-item {
+    background: #111;
+    border: 1px solid #1a1a1a;
+    padding: 30rpx;
+    border-radius: 20rpx;
+    margin-bottom: 25rpx;
+}
+.h-card-top {
+    display: flex;
+    align-items: center;
+    gap: 15rpx;
+    margin-bottom: 15rpx;
+}
+.h-item-time {
+    font-size: 22rpx;
+    color: #444;
+    font-weight: bold;
+}
+.h-item-dot {
+    width: 8rpx;
+    height: 8rpx;
+    background: #007AFF;
+    border-radius: 50%;
+}
+.h-item-content {
+    font-size: 34rpx;
+    color: #eee;
+    line-height: 1.4;
 }
 
+.empty-state {
+    text-align: center;
+    margin-top: 200rpx;
+}
+.empty-state text {
+    color: #222;
+    font-size: 28rpx;
+    letter-spacing: 4rpx;
+}
+.empty-line {
+    width: 40rpx;
+    height: 2rpx;
+    background: #222;
+    margin: 20rpx auto;
+}
+
+/* 基础辅助 */
+.video-hidden { position: fixed; left: -2000px; }
 .canvas-full {
     width: 100%;
     height: 100%;
     position: absolute;
-    top: 0;
-    left: 0;
-    z-index: 2;
+    z-index: 1;
 }
 
-canvas {
-    width: 100% !important;
-    height: 100% !important;
-    object-fit: cover;
-    image-rendering: -webkit-optimize-contrast;
+@keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
-
-.video-hidden {
-    position: fixed;
-    top: -5000px;
-    visibility: hidden;
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10rpx); }
+    to { opacity: 1; transform: translateY(0); }
 }
-
-/* 启动层 */
-.loading-overlay {
-    position: absolute;
-    top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0, 0, 0, 0.8);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 100;
-}
-
-.start-card {
-    width: 70%;
-    background: #fff;
-    border-radius: 40rpx;
-    padding: 50rpx;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-
-/* 历史记录遮罩 - 关键修复 */
-.history-overlay {
-    position: absolute;
-    top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.5);
-    z-index: 200;
-    display: flex;
-    align-items: flex-end;
-    /* 默认不响应，不阻断渲染 */
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-    transition: all 0.3s ease;
-}
-
-/* 激活状态 */
-.history-active {
-    opacity: 1;
-    visibility: visible;
-    pointer-events: auto;
-}
-
-.history-card {
-    width: 100%;
-    height: 60vh;
-    background: #fff;
-    border-radius: 40rpx 40rpx 0 0;
-    padding: 40rpx;
-    box-sizing: border-box;
-    transform: translateY(100%);
-    transition: transform 0.3s ease;
-}
-
-.history-active .history-card {
-    transform: translateY(0);
-}
-
-.history-header { display: flex; justify-content: space-between; margin-bottom: 30rpx; }
-.h-title { font-weight: bold; color: #333; font-size: 34rpx; }
-.h-close { color: #007AFF; font-size: 30rpx; }
-
-.history-scroll { height: calc(60vh - 150rpx); }
-.history-item {
-    padding: 25rpx 0;
-    border-bottom: 1rpx solid #f0f0f0;
-}
-.h-time { font-size: 22rpx; color: #999; }
-.h-msg { font-size: 30rpx; color: #333; margin-top: 8rpx; display: block; }
-.h-empty { text-align: center; color: #ccc; margin-top: 100rpx; }
-
-/* 底部操作栏 */
-.action-bar {
-    padding: 30rpx 40rpx 60rpx;
-    background: #ffffff;
-    border-radius: 40rpx 40rpx 0 0;
-    z-index: 50;
-}
-
-.debug-panel { background: #f8f8f8; padding: 15rpx 20rpx; border-radius: 15rpx; margin-bottom: 20rpx; }
-.debug-line { font-size: 22rpx; color: #888; font-family: monospace; }
-.btn-group { display: flex; gap: 20rpx; }
-
-.btn-start, .btn-switch {
-    background: linear-gradient(135deg, #007AFF, #0056b3);
-    color: #fff; border-radius: 100rpx; border: none;
-}
-
-.btn-switch { flex: 1.5; background: #34c759; height: 90rpx; line-height: 90rpx; font-size: 28rpx; }
-.btn-clear { flex: 1; background: #f2f2f7; color: #333; border-radius: 24rpx; height: 90rpx; line-height: 90rpx; font-size: 28rpx; border: none; }
-
-button:active { opacity: 0.8; transform: scale(0.98); }
