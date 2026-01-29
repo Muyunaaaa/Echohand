@@ -1,122 +1,113 @@
 import { SignLanguageProcessor } from './signLanguage.js';
 
 let handsInstance = null;
-let isInitializing = false;
 let currentFacingMode = 'user';
 let animationId = null;
 let videoTrack = null;
+let owner = null;
 
-// 统一日志上报：现在它能把算法内部的日志也发给 UI
+function internalSend(type, content) {
+    if (owner && owner.callMethod) {
+        owner.callMethod('receiveMessage', { type, content });
+    }
+}
+
 function dbg(tag, msg, obj) {
     const time = new Date().toISOString().slice(11, 23);
     let text = `[${time}][${tag}] ${msg}`;
     if (obj !== undefined) {
         try { text += ' ' + (typeof obj === 'string' ? obj : JSON.stringify(obj)); } catch (e) {}
     }
-    // 关键修复：使用全局绑定的实例发送消息，防止 this 指向 undefined
-    if (window.__MP_SENDER) {
-        window.__MP_SENDER.callMethod('receiveMessage', {
-            type: 'log',
-            content: text
-        });
-    }
     console.log(text);
+    internalSend('log', text);
+}
+
+function runInitAlgorithm() {
+    if (!window.ort) {
+        dbg('AI-INIT', '从 CDN 加载库...');
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js';
+        script.onload = () => SignLanguageProcessor.init(window.ort, dbg);
+        script.onerror = () => dbg('AI-ERR', 'CDN 库加载失败');
+        document.head.appendChild(script);
+    } else {
+        SignLanguageProcessor.init(window.ort, dbg);
+    }
 }
 
 export default {
     mounted() {
-        // 绑定全局发送器
-        window.__MP_SENDER = this.$ownerInstance;
-        dbg('BOOT', 'renderjs mounted');
-
-        this.initAlgorithm();
-        this.waitForHandsReady();
+        owner = this.$ownerInstance;
+        dbg('BOOT', 'Renderjs 已就绪并挂载');
+        runInitAlgorithm();
     },
-
     methods: {
-        sendToUI(type, content) {
-            if (window.__MP_SENDER) {
-                window.__MP_SENDER.callMethod('receiveMessage', { type, content });
+        // 核心修复：接收 Vue 层的数据变化
+        onAlgoTrigger(newValue) {
+            if (!newValue || !newValue.mode) return;
+            dbg('TRIGGER', `监听到属性变化: ${newValue.mode}`);
+
+            if (newValue.mode === 'reset') {
+                this.resetAlgorithm();
+            } else {
+                this.switchAlgoMode(newValue.mode);
             }
         },
 
-        async initAlgorithm() {
-            if (!window.ort) {
-                dbg('AI-INIT', '正在从网络加载 ONNX 运行库...');
-                const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js';
-                script.onload = () => {
-                    dbg('AI-INIT', '库加载完成，触发算法引擎初始化');
-                    SignLanguageProcessor.init(window.ort, dbg);
-                };
-                script.onerror = () => {
-                    dbg('AI-ERR', 'ONNX 库加载失败，强制进入降级模式');
-                    SignLanguageProcessor.init(null, dbg);
-                };
-                document.head.appendChild(script);
-            } else {
-                SignLanguageProcessor.init(window.ort, dbg);
+        switchAlgoMode(mode) {
+            dbg('MODE-CHANGE', `执行切换: ${mode}`);
+            try {
+                if (mode === 'basic') {
+                    SignLanguageProcessor.session = null;
+                    dbg('MODE-CHANGE', '✅ 已切换至基础几何识别');
+                } else {
+                    dbg('MODE-CHANGE', '正在激活 AI 推理...');
+                    runInitAlgorithm();
+                }
+                internalSend('mode_status', mode);
+            } catch (e) {
+                dbg('MODE-ERR', '切换过程崩溃', e.message);
             }
         },
 
         resetAlgorithm() {
             SignLanguageProcessor.clear();
-            dbg('AI', 'Inference buffer cleared');
-        },
-
-        async waitForHandsReady() {
-            const p = 'static/mp-hands/';
-            if (!window.Hands) {
-                try {
-                    dbg('LOAD', 'loading mediapipe scripts');
-                    await this.loadScript(`${p}hands.js`);
-                    await this.loadScript(`${p}drawing_utils.js`);
-                } catch (e) {
-                    this.sendToUI('error', 'MediaPipe 脚本加载失败');
-                    return;
-                }
-            }
-            const check = () => {
-                if (typeof window.Hands === 'function') {
-                    dbg('READY', 'Hands engine ready');
-                } else {
-                    setTimeout(check, 50);
-                }
-            };
-            check();
-        },
-
-        loadScript(url) {
-            return new Promise((resolve, reject) => {
-                const s = document.createElement('script');
-                s.src = url; s.onload = resolve; s.onerror = reject;
-                document.head.appendChild(s);
-            });
+            dbg('AI', '识别缓冲已重置');
         },
 
         async switchCamera() {
-            if (isInitializing) return;
             currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
-            dbg('CAM', 'Switching to: ' + currentFacingMode);
-            await this.manualStart();
+            dbg('CAM', '切换摄像头为: ' + currentFacingMode);
+            this.manualStart();
         },
 
         async manualStart() {
+            dbg('SYS', '尝试激活视觉引擎...');
             if (typeof window.Hands !== 'function') {
-                this.sendToUI('error', 'AI 引擎未就绪');
-                return;
+                dbg('LOAD', '加载 MediaPipe 核心脚本...');
+                const p = 'static/mp-hands/';
+                const load = (src) => new Promise((res, rej) => {
+                    const s = document.createElement('script');
+                    s.src = src; s.onload = res; s.onerror = rej;
+                    document.head.appendChild(s);
+                });
+                try {
+                    await load(`${p}hands.js`);
+                    await load(`${p}drawing_utils.js`);
+                } catch (e) {
+                    dbg('ERR', '脚本加载失败');
+                    return;
+                }
             }
-            isInitializing = true;
-            dbg('CAM', 'Initializing camera system');
-            if (animationId) cancelAnimationFrame(animationId);
-            if (videoTrack) videoTrack.stop();
 
+            if (videoTrack) videoTrack.stop();
             document.querySelectorAll('video').forEach(v => v.remove());
-            await new Promise(r => setTimeout(r, 500));
 
             const vContainer = document.getElementById('video_mount_container');
             const video = document.createElement('video');
-            video.setAttribute('autoplay', ''); video.setAttribute('muted', ''); video.setAttribute('playsinline', 'true');
+            video.setAttribute('autoplay', '');
+            video.setAttribute('muted', '');
+            video.setAttribute('playsinline', 'true');
             video.style.cssText = 'position:fixed;top:-5000px;width:1280px;height:720px;';
             vContainer.appendChild(video);
 
@@ -127,23 +118,22 @@ export default {
                 videoTrack = stream.getVideoTracks()[0];
                 video.srcObject = stream;
                 video.onloadedmetadata = () => {
-                    dbg('CAM', 'Video stream active');
-                    video.play().then(() => this.initAIAndDrive(video));
+                    video.play().then(() => {
+                        this.initAIAndDrive(video);
+                    });
                 };
-                this.sendToUI('ready', currentFacingMode);
+                internalSend('ready', currentFacingMode);
             } catch (err) {
-                dbg('ERR', 'Camera access failed', err);
-                isInitializing = false;
-                this.sendToUI('error', '摄像头启动失败');
+                dbg('ERR', '摄像头权限失败', err.message);
             }
         },
 
         initAIAndDrive(video) {
-            dbg('AI', 'Initializing AI pipeline');
             const cContainer = document.getElementById('canvas_mount_container');
             const canvas = document.createElement('canvas');
             canvas.style.cssText = 'width:100%;height:100%;display:block;object-fit:cover;';
-            cContainer.innerHTML = ''; cContainer.appendChild(canvas);
+            cContainer.innerHTML = '';
+            cContainer.appendChild(canvas);
             const ctx = canvas.getContext('2d', { alpha: false });
 
             if (!handsInstance) {
@@ -151,7 +141,7 @@ export default {
                     locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/${f}`
                 });
                 handsInstance.setOptions({
-                    maxNumHands: 1,
+                    maxNumHands: 2,
                     modelComplexity: 1,
                     minDetectionConfidence: 0.5,
                     minTrackingConfidence: 0.5
@@ -165,32 +155,20 @@ export default {
                     canvas.height = video.videoHeight;
                 }
 
-                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                    const word = await SignLanguageProcessor.analyze(results.multiHandLandmarks[0]);
-
-                    // 核心修改：只有当识别到的词与上一次不同，或者已经消失了一阵子才发送
-                    if (word && word !== this.lastSentWord) {
-                        this.sendToUI('sign_word', word);
-                        this.lastSentWord = word;
-
-                        // 3秒后允许再次发送同一个词，防止识别中断
-                        clearTimeout(this.wordTimeout);
-                        this.wordTimeout = setTimeout(() => { this.lastSentWord = null; }, 3000);
-                    }
-
-                    // 保留用于绘制的点位数据
-                    this.sendToUI('hand_data', results.multiHandLandmarks);
+                if (results.multiHandLandmarks) {
+                    const word = await SignLanguageProcessor.analyze(results.multiHandLandmarks);
+                    if (word) internalSend('sign_word', word);
                 }
 
                 ctx.save();
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 if (currentFacingMode === 'user') {
-                    ctx.translate(canvas.width, 0); ctx.scale(-1, 1);
+                    ctx.translate(canvas.width, 0);
+                    ctx.scale(-1, 1);
                 }
                 ctx.drawImage(results.image, 0, 0);
                 if (results.multiHandLandmarks) {
                     for (const lm of results.multiHandLandmarks) {
-                        // 保持蓝色连线与白色点位的视觉效果
                         drawConnectors(ctx, lm, HAND_CONNECTIONS, {color: '#007AFF', lineWidth: 4});
                         drawLandmarks(ctx, lm, {color: '#FFFFFF', lineWidth: 2});
                     }
@@ -198,16 +176,13 @@ export default {
                 ctx.restore();
             });
 
-            const loop = async () => {
+            const tick = async () => {
                 if (video.readyState >= 2) {
                     try { await handsInstance.send({ image: video }); } catch (e) {}
                 }
-                animationId = requestAnimationFrame(loop);
+                animationId = requestAnimationFrame(tick);
             };
-            loop();
-            isInitializing = false;
-            this.sendToUI('ai_online', '');
-            dbg('AI', 'Hand tracking loop started');
+            tick();
         }
     }
 };
