@@ -14,6 +14,7 @@
       </view>
     </view>
 
+    <!-- 视觉区域 -->
     <view class="vision-area">
       <view id="video_mount_container" class="video-hidden"></view>
       <view id="canvas_mount_container" class="canvas-full"></view>
@@ -114,6 +115,18 @@ export default {
       algoTrigger: { mode: 'ai', timestamp: 0 }
     }
   },
+  
+  onShow() {
+    this.refreshCustomGesturesList();
+  },
+  
+  onHide() {
+    this.cleanupTimers();
+    if (this.isRecordingCustom) {
+      this.cancelRecording();
+    }
+  },
+  
   methods: {
     receiveMessage(data) {
       if (data.type === 'ready') this.isCameraRunning = true;
@@ -165,8 +178,6 @@ export default {
   }
 }
 </script>
-
-<script module="mediapipe" lang="renderjs" src="./mediapipe.renderjs.js"></script>
 
 <style>
 @import "./index.css";
