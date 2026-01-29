@@ -155,8 +155,14 @@ export default {
                     canvas.height = video.videoHeight;
                 }
 
-                if (results.multiHandLandmarks) {
-                    const word = await SignLanguageProcessor.analyze(results.multiHandLandmarks);
+                if (results.multiHandLandmarks && results.multiHandedness) {
+                    // 传入坐标、左右手信息、是否前置摄像头
+                    const isUser = currentFacingMode === 'user';
+                    const word = await SignLanguageProcessor.analyze(
+                        results.multiHandLandmarks,
+                        results.multiHandedness,
+                        isUser
+                    );
                     if (word) internalSend('sign_word', word);
                 }
 

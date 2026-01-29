@@ -4,6 +4,9 @@ export const SignLanguageProcessor = {
     MAX_FRAMES: 30,
     isInitializing: false,
     _logger: null,
+    // 关键：请务必检查 labels 顺序是否与你 Python 训练生成的 labels.json 完全一致
+    // 模型输出的是索引，索引对不上，单词就全错
+    labels: ["accident", "all", "apple", "bed", "before", "bird", "black", "blue", "book", "bowling", "can", "candy", "chair", "change", "clothes", "color", "computer", "cool", "corn", "cousin", "cow", "dance", "dark", "deaf", "doctor", "dog", "drink", "eat", "enjoy", "family", "fine", "finish", "fish", "go", "graduate", "hat", "hearing", "help", "hot", "kiss", "language", "later", "like", "man", "many", "mother", "no", "now", "orange", "shirt", "study", "table", "tall", "thanksgiving", "thin", "walk", "what", "white", "who", "woman", "wrong", "year", "yes"],
 
     log(tag, msg) {
         if (this._logger) this._logger(tag, msg);
@@ -18,67 +21,64 @@ export const SignLanguageProcessor = {
             ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
             const cloudPath = 'https://cdn.jsdelivr.net/gh/Muyunaaaa/Echohand@master/slr_model.onnx';
             this.log("MODEL-TRY", "加载云端 AI 引擎...");
-            this.session = await ort.InferenceSession.create(cloudPath, { executionProviders: ['wasm'] });
+            this.session = await ort.InferenceSession.create(cloudPath, {
+                executionProviders: ['wasm'],
+                graphOptimizationLevel: 'all'
+            });
             this.log("MODEL-SUCCESS", "✅ AI 推理引擎激活成功");
         } catch (e) {
             this.log("MODEL-ERROR", `AI 引擎激活失败: ${e.message}`);
-            this.session = null; // 确保失败后回退到几何模式
+            this.session = null;
         } finally { this.isInitializing = false; }
     },
 
-    analyze(multiLandmarks) {
-        // 核心排查点：确保 multiLandmarks 存在且有效
+    /**
+     * @param {Array} multiLandmarks - 坐标数据
+     * @param {Array} multiHandedness - 左右手信息 (由 MediaPipe 提供)
+     * @param {Boolean} isUserFacing - 是否为前置摄像头 (用于处理坐标翻转)
+     */
+    analyze(multiLandmarks, multiHandedness, isUserFacing = true) {
         if (!multiLandmarks || multiLandmarks.length === 0) {
+            // 如果连续多帧没手，建议清空 buffer 避免动作断层
+            if (this.frameBuffer.length > 0) this.clear();
             return null;
         }
 
         if (this.session) {
-            // --- AI 模式逻辑 ---
-            const normalize = (lm) => {
-                if (!lm) return new Array(42).fill(0);
-                const wrist = lm[0];
-                return lm.flatMap(p => [p.x - wrist.x, p.y - wrist.y]);
-            };
-            const hand1 = normalize(multiLandmarks[0]);
-            const hand2 = normalize(multiLandmarks[1]);
-            const combinedFrame = [...hand1, ...hand2];
+            // 1. 初始化 84 维向量 (42位左手 + 42位右手)
+            let frameData = new Array(84).fill(0);
 
-            this.frameBuffer.push(combinedFrame);
+            // 2. 严格按左右手填充数据
+            multiLandmarks.forEach((landmarks, index) => {
+                const handedness = multiHandedness[index];
+                // MediaPipe 的 label 可能由于镜像反转，这里做鲁棒性处理
+                // 目标：前42位给模型训练时的“第一只手”，后42位给“第二只手”
+                const isLeft = handedness.label === 'Left';
+                const offset = isLeft ? 0 : 42;
+
+                landmarks.forEach((lm, i) => {
+                    if (i < 21) {
+                        let x = lm.x;
+                        // 如果是前置镜像摄像头，且模型训练时用的是非镜像数据，需要翻转 X
+                        if (isUserFacing) x = 1.0 - x;
+
+                        frameData[offset + i * 2] = x;
+                        frameData[offset + i * 2 + 1] = lm.y;
+                    }
+                });
+            });
+
+            this.frameBuffer.push(frameData);
             if (this.frameBuffer.length > this.MAX_FRAMES) this.frameBuffer.shift();
-            if (this.frameBuffer.length === this.MAX_FRAMES) return this.runInference();
+
+            // 3. 只有缓冲区满 30 帧才预测
+            if (this.frameBuffer.length === this.MAX_FRAMES) {
+                return this.runInference();
+            }
         } else {
-            // --- 几何模式逻辑 ---
-            // 显式提取第一只手的 landmarks
-            const hand = multiLandmarks[0];
-            // 增加一条内部调试日志（在真机控制台看）
-            // console.log("执行几何逻辑判定, 坐标点数:", hand.length);
-            return this.runFallback(hand);
+            return this.runFallback(multiLandmarks[0]);
         }
         return null;
-    },
-
-    runFallback(landmarks) {
-        // 1. 结构化判定准备
-        if (!landmarks || landmarks.length < 21) return null;
-
-        const tips = [8, 12, 16, 20];
-        const bases = [6, 10, 14, 18];
-
-        // 2. 核心算法：y 轴坐标对比（屏幕坐标系 y 越小越高）
-        const s = tips.map((t, i) => landmarks[t].y < landmarks[bases[i]].y);
-
-        // 3. 判定库 (增加日志反馈到 Renderjs 日志中)
-        let result = null;
-        if (s.every(v => v === true)) result = "你好";
-        else if (s.every(v => v === false)) result = "谢谢";
-        else if (s[0] && s[1] && !s[2] && !s[3]) result = "学习";
-        else if (s[0] && !s[1] && !s[2] && !s[3]) result = "你";
-
-        if (result) {
-            // 几何模式下也打个日志，方便确认逻辑走通了
-            // this.log("GEO-HIT", `匹配到手势: ${result}`);
-        }
-        return result;
     },
 
     async runInference() {
@@ -87,12 +87,44 @@ export const SignLanguageProcessor = {
             const tensor = new window.ort.Tensor('float32', inputData, [1, 30, 84]);
             const results = await this.session.run({ [this.session.inputNames[0]]: tensor });
             const output = results[this.session.outputNames[0]].data;
+
+            // 找出置信度最高的索引
             const argMax = output.indexOf(Math.max(...output));
-            if (output[argMax] < 0.85) return null;
-            const labels = ["你好", "谢谢", "学习", "再见", "我", "你"];
-            return labels[argMax] || null;
-        } catch (e) { return null; }
+            const confidence = output[argMax];
+
+            // 调试日志：输出 Top 3 结果，方便排查是否标签错位
+            const sortedResults = Array.from(output)
+                .map((prob, idx) => ({ prob, label: this.labels[idx] || `Index-${idx}` }))
+                .sort((a, b) => b.prob - a.prob)
+                .slice(0, 3);
+
+            console.log(`[AI-PREDICT] Top 1: ${sortedResults[0].label} (${(sortedResults[0].prob * 100).toFixed(2)}%)`);
+
+            // 阈值控制，建议先调低到 0.5 进行测试
+            if (confidence < 0.7) {
+                return null;
+            }
+
+            return this.labels[argMax] || null;
+        } catch (e) {
+            this.log("INFER-ERR", e.message);
+            return null;
+        }
     },
 
-    clear() { this.frameBuffer = []; }
+    runFallback(landmarks) {
+        if (!landmarks || landmarks.length < 21) return null;
+        const tips = [8, 12, 16, 20];
+        const bases = [6, 10, 14, 18];
+        const s = tips.map((t, i) => landmarks[t].y < landmarks[bases[i]].y);
+
+        if (s.every(v => v === true)) return "你好";
+        if (s.every(v => v === false)) return "谢谢";
+        return null;
+    },
+
+    clear() {
+        this.frameBuffer = [];
+        console.log("[Algo] Buffer Cleared");
+    }
 };
