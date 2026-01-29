@@ -128,3 +128,6 @@ export const SignLanguageProcessor = {
         console.log("[Algo] Buffer Cleared");
     }
 };
+
+// 自动初始化
+SignLanguageProcessor.init();
