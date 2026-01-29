@@ -1,203 +1,367 @@
-/* 基础容器：占据全屏，禁止滚动和伸缩 */
 .container {
-    display: flex;
-    flex-direction: column;
     height: 100vh;
     width: 100vw;
     background: #000;
+    display: flex;
+    flex-direction: column;
+    color: #fff;
     overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
 }
 
-/* 顶部状态栏：白色卡片感 */
-.status-bar {
-    background: #ffffff;
-    padding: 100rpx 40rpx 40rpx;
-    border-radius: 0 0 40rpx 40rpx;
-    box-shadow: 0 4rpx 20rpx rgba(0,0,0,0.2);
-    z-index: 10;
+/* --- 顶部经典导航：微调下移避开刘海 --- */
+.glass-header {
+    /* 增加 padding-top 到 125rpx，实现向下挪动一点点的视觉效果 */
+    padding: 125rpx 50rpx 40rpx;
+    position: absolute;
+    top: 0;
+    width: 100%;
+    z-index: 100;
+    box-sizing: border-box;
 }
-
-.header {
+.header-main {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 10rpx;
 }
-
-.title {
-    font-size: 36rpx;
-    font-weight: bold;
-    color: #333;
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 15rpx;
 }
-
-.version {
-    font-size: 20rpx;
+.brand-logo {
     color: #007AFF;
-    background: rgba(0,122,255,0.1);
-    padding: 4rpx 12rpx;
-    border-radius: 8rpx;
+    font-size: 18rpx;
 }
-
-.result-text {
-    font-size: 56rpx;
+.brand-name {
+    font-size: 32rpx;
     font-weight: 800;
-    color: #007AFF;
-    text-align: center;
-    display: block;
-    min-height: 80rpx;
-    line-height: 80rpx;
+    letter-spacing: 6rpx;
+    line-height: 1;
+}
+.history-icon {
+    font-size: 50rpx;
+    color: #fff;
+    opacity: 0.8;
+    line-height: 1;
 }
 
-/* 视觉核心区域：强制全屏铺满 */
-.vision-area {
-    flex: 1;
-    position: relative;
-    background: #000;
-    overflow: hidden;
-    /* 解决一些机型圆角锯齿问题 */
-    mask-image: radial-gradient(white, black);
-}
-
-/* 渲染层：这是解决模糊的核心 */
-.vision-canvas-container {
-    width: 100%;
-    height: 100%;
+/* --- 封面页 --- */
+.welcome-overlay {
     position: absolute;
-    top: 0;
-    left: 0;
+    inset: 0;
+    z-index: 200;
+    background: radial-gradient(circle at 50% 45%, #001a33 0%, #000 100%);
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
 }
-
-canvas {
-    width: 100% !important;
-    height: 100% !important;
-    /* 关键属性：强制开启铺满拉伸 */
-    object-fit: cover;
-
-    /* 核心抗模糊：不同浏览器内核的锐化指令 */
-    image-rendering: -webkit-optimize-contrast; /* Chrome/Safari 强制对比度优化 */
-    image-rendering: crisp-edges;               /* 标准锐化边缘 */
-    image-rendering: pixelated;                 /* 如果依旧糊得像马赛克，尝试禁用此项或开启 */
-
-    /* 硬件加速补丁 */
-    transform: translateZ(0);
-    backface-visibility: hidden;
-}
-
-/* 隐藏原始 Video 节点，防止重影或占用带宽 */
-.video-hidden {
-    position: fixed;
-    top: -5000px;
-    left: -5000px;
-    visibility: hidden;
-}
-
-/* 启动遮罩层 */
-.loading-overlay {
+.bg-glow-sphere {
     position: absolute;
-    top: 0;
-    left: 0;
     width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.85);
-    backdrop-filter: blur(10px); /* 磨砂玻璃效果 */
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 100;
+    height: 60%;
+    background: radial-gradient(circle, rgba(0,122,255,0.1) 0%, transparent 70%);
+    top: 10%;
+    filter: blur(60px);
 }
-
-.start-card {
-    width: 75%;
-    background: #ffffff;
-    border-radius: 40rpx;
-    padding: 50rpx;
+.hero-section {
     display: flex;
     flex-direction: column;
     align-items: center;
-    box-shadow: 0 10rpx 40rpx rgba(0,0,0,0.5);
+    z-index: 10;
+    margin-bottom: 120rpx;
 }
-
-.card-title {
-    font-size: 40rpx;
-    font-weight: bold;
-    color: #333;
-    margin-bottom: 20rpx;
+.app-title {
+    font-size: 100rpx;
+    font-weight: 100;
+    letter-spacing: 12rpx;
+    margin-bottom: 30rpx;
 }
-
-.card-desc {
-    font-size: 26rpx;
-    color: #666;
-    text-align: center;
-    line-height: 1.5;
-}
-
-.btn-start {
+.slogan-container {
     width: 100%;
-    background: linear-gradient(135deg, #007AFF, #0056b3);
-    color: #ffffff;
-    border-radius: 100rpx;
-    margin: 40rpx 0;
-    font-size: 32rpx;
-    border: none;
+    text-align: center;
 }
-
-.debug-status {
-    font-size: 20rpx;
-    color: #999;
-}
-
-/* 底部操作栏 */
-.action-bar {
-    padding: 30rpx 40rpx 60rpx;
-    background: #ffffff;
-    border-radius: 40rpx 40rpx 0 0;
-}
-
-.debug-panel {
-    background: #f8f8f8;
-    padding: 15rpx 20rpx;
-    border-radius: 15rpx;
-    margin-bottom: 20rpx;
-}
-
-.debug-line {
-    font-size: 22rpx;
-    color: #888;
+.app-slogan {
     display: block;
-    font-family: monospace;
-}
-
-.btn-group {
-    display: flex;
-    gap: 20rpx;
-}
-
-.btn-switch {
-    flex: 1.5;
-    background: #34c759;
-    color: #fff;
-    border-radius: 24rpx;
+    font-size: 28rpx;
+    color: #007AFF;
+    letter-spacing: 12rpx;
     font-weight: bold;
-    height: 90rpx;
-    line-height: 90rpx;
-    font-size: 28rpx;
+    margin-top: 10rpx;
 }
 
-.btn-clear {
-    flex: 1;
-    background: #f2f2f7;
-    color: #333;
-    border-radius: 24rpx;
-    height: 90rpx;
-    line-height: 90rpx;
-    font-size: 28rpx;
+.visual-engine {
+    position: relative;
+    width: 350rpx;
+    height: 350rpx;
+    margin-bottom: 80rpx;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.core-node {
+    width: 12rpx;
+    height: 12rpx;
+    background: #fff;
+    border-radius: 50%;
+    box-shadow: 0 0 30rpx #007AFF;
+}
+.orbit {
+    position: absolute;
+    border: 1px solid rgba(0, 122, 255, 0.15);
+    border-radius: 50%;
+}
+.orbit-1 {
+    width: 200rpx;
+    height: 200rpx;
+    border-top-color: #007AFF;
+    animation: rotate 6s infinite linear;
+}
+.orbit-2 {
+    width: 320rpx;
+    height: 320rpx;
+    border-bottom-color: #fff;
+    animation: rotate 12s infinite linear reverse;
 }
 
-/* 点击反馈效果 */
-button:active {
-    opacity: 0.8;
-    transform: scale(0.98);
+.btn-start-engine {
+    background: transparent;
+    color: #fff;
+    padding: 25rpx 100rpx;
+    border-radius: 10rpx;
+    font-size: 28rpx;
+    border: 1px solid rgba(255,255,255,0.3);
+    z-index: 10;
+    letter-spacing: 4rpx;
+}
+
+/* --- AR 界面：跟随 Header 同步微调 --- */
+.ar-display {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    /* 调大顶部 padding 确保蓝色词条不遮挡下移后的标题 */
+    padding: 250rpx 40rpx;
+    pointer-events: none;
+}
+.word-tags-row {
+    display: flex;
+    gap: 15rpx;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
+}
+.word-tag-item {
+    background: #007AFF;
+    color: #fff;
+    padding: 10rpx 30rpx;
+    border-radius: 12rpx;
+    font-size: 26rpx;
+    font-weight: bold;
+    animation: fadeIn 0.3s ease;
+    box-shadow: 0 4rpx 15rpx rgba(0,122,255,0.3);
+}
+.waiting-hint {
+    font-size: 22rpx;
+    color: rgba(255,255,255,0.2);
+    letter-spacing: 4rpx;
+}
+
+.sentence-fixed-area {
+    position: absolute;
+    bottom: 280rpx;
+    width: 90%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.ai-status-hint {
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+    font-size: 20rpx;
+    color: #007AFF;
+    font-weight: bold;
+    margin-bottom: 25rpx;
+}
+.sentence-black-card {
+    width: 100%;
+    background: rgba(0,0,0,0.85);
+    backdrop-filter: blur(30px);
+    padding: 45rpx;
+    border-radius: 40rpx;
+    border: 1px solid rgba(255,255,255,0.15);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 20rpx 60rpx rgba(0,0,0,0.5);
+}
+.sentence-text {
+    font-size: 44rpx;
+    color: #fff;
+    line-height: 1.6;
+    text-align: center;
+    font-weight: 600;
+}
+
+/* --- 底部控制栏 --- */
+.control-panel {
+    position: fixed;
+    bottom: 80rpx;
+    left: 0;
+    width: 100%;
+    z-index: 500;
+    padding: 0 80rpx;
+    box-sizing: border-box;
+}
+.classic-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+.footer-btn {
+    font-size: 28rpx;
+    font-weight: bold;
+    color: rgba(255,255,255,0.6);
+    letter-spacing: 4rpx;
+    padding: 20rpx;
+}
+.footer-divider {
+    width: 1px;
+    height: 30rpx;
+    background: rgba(255,255,255,0.2);
+}
+
+/* --- 历史抽屉菜单：下移微调 --- */
+.history-drawer {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.8);
+    z-index: 1000;
+    visibility: hidden;
+    opacity: 0;
+    transition: 0.3s;
+}
+.drawer-open {
+    visibility: visible;
+    opacity: 1;
+}
+.drawer-content {
+    position: absolute;
+    right: 0;
+    width: 85%;
+    height: 100%;
+    background: #080808;
+    /* 这里的 padding-top 也同步微调到 125rpx 以上 */
+    padding: 140rpx 40rpx;
+    transform: translateX(100%);
+    transition: 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+.drawer-open .drawer-content {
+    transform: translateX(0);
+}
+
+.drawer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 60rpx;
+    border-bottom: 1px solid #1a1a1a;
+    padding-bottom: 30rpx;
+}
+.drawer-title-main {
+    font-size: 40rpx;
+    font-weight: 900;
+    letter-spacing: 4rpx;
+    color: #fff;
+    display: block;
+}
+.drawer-title-sub {
+    font-size: 20rpx;
+    color: #444;
+    letter-spacing: 4rpx;
+    margin-top: 5rpx;
+}
+.drawer-close-btn {
+    padding: 10rpx 25rpx;
+    border: 1px solid #333;
+    border-radius: 10rpx;
+}
+.close-txt {
+    color: #007AFF;
+    font-size: 24rpx;
+    font-weight: bold;
+}
+
+/* 卡片式列表 */
+.history-card-item {
+    background: #111;
+    border: 1px solid #1a1a1a;
+    padding: 30rpx;
+    border-radius: 20rpx;
+    margin-bottom: 25rpx;
+}
+.h-card-top {
+    display: flex;
+    align-items: center;
+    gap: 15rpx;
+    margin-bottom: 15rpx;
+}
+.h-item-time {
+    font-size: 22rpx;
+    color: #444;
+    font-weight: bold;
+}
+.h-item-dot {
+    width: 8rpx;
+    height: 8rpx;
+    background: #007AFF;
+    border-radius: 50%;
+}
+.h-item-content {
+    font-size: 34rpx;
+    color: #eee;
+    line-height: 1.4;
+}
+
+.empty-state {
+    text-align: center;
+    margin-top: 200rpx;
+}
+.empty-state text {
+    color: #222;
+    font-size: 28rpx;
+    letter-spacing: 4rpx;
+}
+.empty-line {
+    width: 40rpx;
+    height: 2rpx;
+    background: #222;
+    margin: 20rpx auto;
+}
+
+/* 基础辅助 */
+.video-hidden { position: fixed; left: -2000px; }
+.canvas-full {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    z-index: 1;
+}
+
+@keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10rpx); }
+    to { opacity: 1; transform: translateY(0); }
 }
